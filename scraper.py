@@ -7,7 +7,14 @@ from dateutil.parser import parse
 from util import post_listing_to_slack, find_points_of_interest
 from slackclient import SlackClient
 import time
-import settings
+import os
+if os.getenv("BEDROOMS", "2") == '4':
+    import settings_4bd as settings
+else:
+    import settings
+
+import requests
+from bs4 import BeautifulSoup
 
 engine = create_engine('sqlite:///listings.db', echo=False)
 
@@ -32,6 +39,7 @@ class Listing(Base):
     cl_id = Column(Integer, unique=True)
     area = Column(String)
     bart_stop = Column(String)
+    thumbs = Column(String)
 
 Base.metadata.create_all(engine)
 
@@ -60,7 +68,7 @@ def scrape_area(area):
         except Exception:
             continue
         listing = session.query(Listing).filter_by(cl_id=result["id"]).first()
-
+        #import pdb; pdb.set_trace()
         # Don't store the listing if it already exists.
         if listing is None:
             if result["where"] is None:
@@ -88,6 +96,16 @@ def scrape_area(area):
             except Exception:
                 pass
 
+            # get the thumbnails, because people are annoying and post
+            # lots of identical listings for the same property
+            # and thumbnail ids are probably the best way to filter these
+            response = requests.get(result['url'])
+            soup = BeautifulSoup(response.content, 'html.parser')
+            thumbs = []
+            for thumb in soup.find_all('a', {'class':'thumb'}):
+                thumbs.append(thumb['data-imgid'])
+            thumb_str = '-'.join(sorted(thumbs))
+
             # Create the listing object.
             listing = Listing(
                 link=result["url"],
@@ -99,15 +117,35 @@ def scrape_area(area):
                 location=result["where"],
                 cl_id=result["id"],
                 area=result["area"],
-                bart_stop=result["bart"]
+                bart_stop=result["bart"],
+                thumbs=thumb_str
             )
 
             # Save the listing so we don't grab it again.
             session.add(listing)
             session.commit()
+            if ('aug' in result['name'].lower() or
+                'jul' in result['name'].lower() or 
+                '8/1' in result['name'] or '7/1' in result['name']):
+                print("ignoring summer lease: {}".format(result['name']))
+                continue
+                
 
             # Return the result if it's near a bart station, or if it is in an area we defined.
             if len(result["bart"]) > 0 or len(result["area"]) > 0:
+                #import pdb; pdb.set_trace()
+                # yeah maybe this should be before this if statement, doesn't really matter 
+                # check the db for identical thumb strings
+                other_thumbs = session.query(Listing).filter(Listing.thumbs == thumb_str).all()
+                if len(other_thumbs) > 1:
+                    # fuckers
+                    print("caught {} duplicates of {}".format(len(other_thumbs), result['url']))
+                    # TODO this is just for debug/testing
+                    for thumb in other_thumbs:
+                        print("url: {}".format(thumb.link))
+                    continue
+
+                print("adding {}".format(result['url']))
                 results.append(result)
 
     return results

@@ -3,10 +3,10 @@ import os
 ## Price
 
 # The minimum rent you want to pay per month.
-MIN_PRICE = 1500
+MIN_PRICE = 2500
 
 # The maximum rent you want to pay per month.
-MAX_PRICE = 3000
+MAX_PRICE = 5200
 
 ## Location preferences
 
@@ -50,9 +50,9 @@ TRANSIT_STATIONS = {
 
 ## Bedrooms
 
-MIN_BEDROOMS = 2
+MIN_BEDROOMS = 4
 
-MAX_BEDROOMS = 2
+MAX_BEDROOMS = 4
 
 # parking options are as follows:
 # 1: carport
